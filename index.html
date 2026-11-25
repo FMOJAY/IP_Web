@@ -263,6 +263,91 @@
       text-align: center;
     }
 
+    /* Whitelist Management Section */
+    .whitelist-section {
+      margin-top: 20px;
+      padding-top: 15px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .whitelist-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #888;
+      margin-bottom: 10px;
+      letter-spacing: 1px;
+    }
+
+    .whitelist-input {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 12px;
+    }
+
+    .whitelist-input::placeholder {
+      color: #666;
+    }
+
+    .whitelist-input:focus {
+      outline: none;
+      border-color: #ff6b6b;
+    }
+
+    .whitelist-add-btn {
+      width: 100%;
+      padding: 8px;
+      background: rgba(255, 107, 107, 0.1);
+      border: 1px solid rgba(255, 107, 107, 0.3);
+      border-radius: 6px;
+      color: #ff6b6b;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.3s;
+    }
+
+    .whitelist-add-btn:hover {
+      background: rgba(255, 107, 107, 0.3);
+    }
+
+    .whitelist-list {
+      margin-top: 10px;
+    }
+
+    .whitelist-entry {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 8px;
+      margin-bottom: 4px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      font-size: 11px;
+    }
+
+    .whitelist-email {
+      color: #a0a8b0;
+    }
+
+    .whitelist-remove {
+      background: none;
+      border: none;
+      color: #ff6b6b;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 0 4px;
+    }
+
+    .whitelist-remove:hover {
+      color: #ff0000;
+    }
+
     /* Hide default Leaflet zoom buttons for a cleaner look */
     .leaflet-control-zoom {
       display: none;
@@ -345,6 +430,14 @@
       <button class="ip-panel-copy-all" onclick="copyAllIPs()">Copy All Logged IPs</button>
       <button class="ip-panel-clear-all" onclick="clearAllIPs()">Clear All</button>
     </div>
+
+    <!-- Whitelist Management -->
+    <div class="whitelist-section">
+      <div class="whitelist-title">🔐 Authorized Emails (Whitelist)</div>
+      <input type="email" class="whitelist-input" id="newWhitelistEmail" placeholder="Enter email to whitelist...">
+      <button class="whitelist-add-btn" onclick="addToWhitelist()">Add to Whitelist</button>
+      <div class="whitelist-list" id="whitelistList"></div>
+    </div>
   </div>
 
   <!-- Leaflet JS -->
@@ -353,6 +446,9 @@
   <script>
     // Store IP logs in localStorage for persistence
     let ipLogs = JSON.parse(localStorage.getItem('ipLogs') || '[]');
+    
+    // Whitelist of authorized emails
+    let whitelist = JSON.parse(localStorage.getItem('whitelist') || '["jeyu55772@gmail.com", "", "", ""]');
 
     // 1. Initialize the Satellite Map
     const map = L.map('map', {
@@ -501,6 +597,7 @@
       }).join('');
 
       countElement.textContent = `${ipLogs.length} IP${ipLogs.length !== 1 ? 's' : ''} logged`;
+      updateWhitelistDisplay();
     }
 
     function copyIP(index) {
@@ -542,16 +639,120 @@
       }
     }
 
-    // 6. Toggle IP Panel
+    // 6. Whitelist Management Functions
+    function saveWhitelist() {
+      localStorage.setItem('whitelist', JSON.stringify(whitelist));
+    }
+
+    function updateWhitelistDisplay() {
+      const listElement = document.getElementById('whitelistList');
+      const validEmails = whitelist.filter(email => email !== '');
+      
+      if (validEmails.length === 0) {
+        listElement.innerHTML = '<div style="color: #666; font-size: 11px;">No authorized emails yet</div>';
+        return;
+      }
+
+      listElement.innerHTML = validEmails.map((email, index) => {
+        const originalIndex = whitelist.indexOf(email);
+        return `
+          <div class="whitelist-entry">
+            <span class="whitelist-email">${email}</span>
+            <button class="whitelist-remove" onclick="removeFromWhitelist(${originalIndex})">✕</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function addToWhitelist() {
+      const input = document.getElementById('newWhitelistEmail');
+      const email = input.value.trim().toLowerCase();
+      
+      if (!email) {
+        alert('Please enter an email address.');
+        return;
+      }
+
+      if (!email.includes('@') || !email.includes('.')) {
+        alert('Please enter a valid email address.');
+        return;
+      }
+
+      if (whitelist.includes(email)) {
+        alert('This email is already whitelisted.');
+        return;
+      }
+
+      // Find first empty slot or add to end
+      const emptyIndex = whitelist.indexOf('');
+      if (emptyIndex !== -1) {
+        whitelist[emptyIndex] = email;
+      } else {
+        whitelist.push(email);
+      }
+
+      saveWhitelist();
+      updateWhitelistDisplay();
+      input.value = '';
+      alert(`Added ${email} to whitelist!`);
+    }
+
+    function removeFromWhitelist(index) {
+      if (confirm('Remove this email from whitelist?')) {
+        whitelist[index] = '';
+        saveWhitelist();
+        updateWhitelistDisplay();
+      }
+    }
+
+    // 7. Check if user is authorized
+    function checkAuthorization() {
+      // Get user's email from Google account (if logged in)
+      // This is a simplified version - you'd need to implement Google Sign-In
+      // For now, we'll check if there's a way to get the email
+      
+      // Try to get email from various sources
+      let userEmail = '';
+      
+      // Check if user is logged into Google (you'd need Google Identity Services for this)
+      // For demonstration, we'll check if there's a stored email
+      const storedEmail = localStorage.getItem('userEmail');
+      if (storedEmail) {
+        userEmail = storedEmail.toLowerCase();
+      }
+
+      // Check if the user's email is in the whitelist
+      const authorized = whitelist.includes(userEmail);
+      
+      if (!authorized) {
+        // Show a message that access is denied
+        console.log('Access denied: Your email is not whitelisted.');
+        return false;
+      }
+      
+      return true;
+    }
+
+    // 8. Toggle IP Panel with whitelist check
     function toggleIPPanel() {
       const panel = document.getElementById('ipPanel');
       const overlay = document.getElementById('overlay');
+      
+      // Check authorization before opening
+      if (!panel.classList.contains('active')) {
+        // Only check when trying to open
+        if (!checkAuthorization()) {
+          alert('⛔ Access Denied: Your email is not authorized to view this panel.');
+          return;
+        }
+      }
+      
       panel.classList.toggle('active');
       overlay.classList.toggle('active');
       updateIPPanel();
     }
 
-    // 7. Keyboard listener for F4
+    // 9. Keyboard listener for F4
     document.addEventListener('keydown', (e) => {
       if (e.key === 'F4') {
         e.preventDefault();
@@ -564,6 +765,30 @@
 
     // Initialize the panel
     updateIPPanel();
+    updateWhitelistDisplay();
+
+    // Note: For actual email detection, you'd need to integrate Google Sign-In
+    // Here's how you'd set it up (uncomment and add your Google Client ID):
+    /*
+    function handleCredentialResponse(response) {
+      const user = JSON.parse(atob(response.credential.split('.')[1]));
+      localStorage.setItem('userEmail', user.email);
+      console.log('Logged in as:', user.email);
+    }
+
+    // Add Google Identity Services script and initialize
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.onload = () => {
+      google.accounts.id.initialize({
+        client_id: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+        callback: handleCredentialResponse
+      });
+      // Render the button or auto-detect
+      google.accounts.id.prompt();
+    };
+    document.head.appendChild(script);
+    */
   </script>
 </body>
 </html>

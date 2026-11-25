@@ -263,11 +263,16 @@
       text-align: center;
     }
 
-    /* Whitelist Management Section */
+    /* Whitelist Management Section - Only visible to owner */
     .whitelist-section {
       margin-top: 20px;
       padding-top: 15px;
       border-top: 1px solid rgba(255, 255, 255, 0.1);
+      display: none; /* Hidden by default */
+    }
+
+    .whitelist-section.owner-visible {
+      display: block;
     }
 
     .whitelist-title {
@@ -431,9 +436,9 @@
       <button class="ip-panel-clear-all" onclick="clearAllIPs()">Clear All</button>
     </div>
 
-    <!-- Whitelist Management -->
-    <div class="whitelist-section">
-      <div class="whitelist-title">🔐 Authorized Emails (Whitelist)</div>
+    <!-- Whitelist Management - Only visible to owner (jeyu55772@gmail.com) -->
+    <div class="whitelist-section" id="whitelistSection">
+      <div class="whitelist-title">🔐 Authorized Emails (Whitelist) - Owner Only</div>
       <input type="email" class="whitelist-input" id="newWhitelistEmail" placeholder="Enter email to whitelist...">
       <button class="whitelist-add-btn" onclick="addToWhitelist()">Add to Whitelist</button>
       <div class="whitelist-list" id="whitelistList"></div>
@@ -449,6 +454,9 @@
     
     // Whitelist of authorized emails
     let whitelist = JSON.parse(localStorage.getItem('whitelist') || '["jeyu55772@gmail.com", "", "", ""]');
+
+    // Owner email (only this email can manage whitelist)
+    const OWNER_EMAIL = 'jeyu55772@gmail.com';
 
     // 1. Initialize the Satellite Map
     const map = L.map('map', {
@@ -598,6 +606,7 @@
 
       countElement.textContent = `${ipLogs.length} IP${ipLogs.length !== 1 ? 's' : ''} logged`;
       updateWhitelistDisplay();
+      checkOwnerVisibility();
     }
 
     function copyIP(index) {
@@ -644,6 +653,24 @@
       localStorage.setItem('whitelist', JSON.stringify(whitelist));
     }
 
+    function getCurrentUserEmail() {
+      // Get user's email from localStorage (set during Google Sign-In)
+      // For now, we'll use a stored email or return empty
+      return localStorage.getItem('userEmail') || '';
+    }
+
+    function checkOwnerVisibility() {
+      const whitelistSection = document.getElementById('whitelistSection');
+      const userEmail = getCurrentUserEmail().toLowerCase();
+      
+      // Only show whitelist management to the owner
+      if (userEmail === OWNER_EMAIL) {
+        whitelistSection.classList.add('owner-visible');
+      } else {
+        whitelistSection.classList.remove('owner-visible');
+      }
+    }
+
     function updateWhitelistDisplay() {
       const listElement = document.getElementById('whitelistList');
       const validEmails = whitelist.filter(email => email !== '');
@@ -665,6 +692,13 @@
     }
 
     function addToWhitelist() {
+      // Double-check owner permission
+      const userEmail = getCurrentUserEmail().toLowerCase();
+      if (userEmail !== OWNER_EMAIL) {
+        alert('⛔ Only the owner can manage the whitelist.');
+        return;
+      }
+
       const input = document.getElementById('newWhitelistEmail');
       const email = input.value.trim().toLowerCase();
       
@@ -698,6 +732,19 @@
     }
 
     function removeFromWhitelist(index) {
+      // Double-check owner permission
+      const userEmail = getCurrentUserEmail().toLowerCase();
+      if (userEmail !== OWNER_EMAIL) {
+        alert('⛔ Only the owner can manage the whitelist.');
+        return;
+      }
+
+      // Prevent removing the owner
+      if (whitelist[index] === OWNER_EMAIL) {
+        alert('⛔ Cannot remove the owner from whitelist.');
+        return;
+      }
+
       if (confirm('Remove this email from whitelist?')) {
         whitelist[index] = '';
         saveWhitelist();
@@ -705,27 +752,14 @@
       }
     }
 
-    // 7. Check if user is authorized
+    // 7. Check if user is authorized to view IP panel
     function checkAuthorization() {
-      // Get user's email from Google account (if logged in)
-      // This is a simplified version - you'd need to implement Google Sign-In
-      // For now, we'll check if there's a way to get the email
+      const userEmail = getCurrentUserEmail().toLowerCase();
       
-      // Try to get email from various sources
-      let userEmail = '';
-      
-      // Check if user is logged into Google (you'd need Google Identity Services for this)
-      // For demonstration, we'll check if there's a stored email
-      const storedEmail = localStorage.getItem('userEmail');
-      if (storedEmail) {
-        userEmail = storedEmail.toLowerCase();
-      }
-
       // Check if the user's email is in the whitelist
       const authorized = whitelist.includes(userEmail);
       
       if (!authorized) {
-        // Show a message that access is denied
         console.log('Access denied: Your email is not whitelisted.');
         return false;
       }
@@ -766,6 +800,12 @@
     // Initialize the panel
     updateIPPanel();
     updateWhitelistDisplay();
+    checkOwnerVisibility();
+
+    // For testing purposes - set the owner email to see whitelist management
+    // Uncomment the line below to test as owner:
+    // localStorage.setItem('userEmail', 'jeyu55772@gmail.com');
+    // checkOwnerVisibility();
 
     // Note: For actual email detection, you'd need to integrate Google Sign-In
     // Here's how you'd set it up (uncomment and add your Google Client ID):
@@ -774,6 +814,7 @@
       const user = JSON.parse(atob(response.credential.split('.')[1]));
       localStorage.setItem('userEmail', user.email);
       console.log('Logged in as:', user.email);
+      checkOwnerVisibility();
     }
 
     // Add Google Identity Services script and initialize

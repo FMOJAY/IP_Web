@@ -103,8 +103,8 @@
       left: 50%;
       transform: translate(-50%, -50%);
       z-index: 2000;
-      width: 500px;
-      max-height: 400px;
+      width: 600px;
+      max-height: 500px;
       background: rgba(10, 14, 18, 0.95);
       backdrop-filter: blur(20px);
       border: 1px solid rgba(255, 255, 255, 0.15);
@@ -167,6 +167,12 @@
 
     .ip-entry-info {
       color: #a0a8b0;
+      flex: 1;
+    }
+
+    .ip-entry-actions {
+      display: flex;
+      gap: 5px;
     }
 
     .ip-entry-copy {
@@ -186,9 +192,25 @@
       color: #ff6b6b;
     }
 
+    .ip-entry-delete {
+      background: rgba(255, 107, 107, 0.1);
+      border: 1px solid rgba(255, 107, 107, 0.3);
+      color: #ff6b6b;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.3s;
+    }
+
+    .ip-entry-delete:hover {
+      background: rgba(255, 107, 107, 0.3);
+      border-color: #ff6b6b;
+    }
+
     .ip-panel-copy-all {
       margin-top: 15px;
-      width: 100%;
+      width: 48%;
       padding: 10px;
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid rgba(255, 255, 255, 0.15);
@@ -206,11 +228,39 @@
       border-color: #ff6b6b;
     }
 
+    .ip-panel-clear-all {
+      margin-top: 15px;
+      width: 48%;
+      padding: 10px;
+      background: rgba(255, 107, 107, 0.1);
+      border: 1px solid rgba(255, 107, 107, 0.3);
+      border-radius: 8px;
+      color: #ff6b6b;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      transition: all 0.3s;
+      float: right;
+    }
+
+    .ip-panel-clear-all:hover {
+      background: rgba(255, 107, 107, 0.3);
+      border-color: #ff6b6b;
+    }
+
     .empty-message {
       text-align: center;
       color: #666;
       padding: 20px;
       font-style: italic;
+    }
+
+    .ip-count {
+      font-size: 11px;
+      color: #888;
+      margin-top: 10px;
+      text-align: center;
     }
 
     /* Hide default Leaflet zoom buttons for a cleaner look */
@@ -229,6 +279,24 @@
 
     .overlay.active {
       display: block;
+    }
+
+    /* Scrollbar styling */
+    .ip-panel::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .ip-panel::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .ip-panel::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+    }
+
+    .ip-panel::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 107, 107, 0.5);
     }
   </style>
 </head>
@@ -272,15 +340,19 @@
       <button class="ip-panel-close" onclick="toggleIPPanel()">✕</button>
     </div>
     <div id="ipEntries"></div>
-    <button class="ip-panel-copy-all" onclick="copyAllIPs()">Copy All Logged IPs</button>
+    <div class="ip-count" id="ipCount"></div>
+    <div style="display: flex; gap: 4%;">
+      <button class="ip-panel-copy-all" onclick="copyAllIPs()">Copy All Logged IPs</button>
+      <button class="ip-panel-clear-all" onclick="clearAllIPs()">Clear All</button>
+    </div>
   </div>
 
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
-    // Store IP logs
-    let ipLogs = [];
+    // Store IP logs in localStorage for persistence
+    let ipLogs = JSON.parse(localStorage.getItem('ipLogs') || '[]');
 
     // 1. Initialize the Satellite Map
     const map = L.map('map', {
@@ -341,8 +413,15 @@
           document.getElementById('ip').textContent = data.ip;
           updateMapLocation(data.latitude, data.longitude, `Approx: ${data.city}, ${data.country}`, 9);
           
-          // Log the IP
-          logIP(data.ip, `${data.city}, ${data.country}`);
+          // Log the IP with detailed info
+          logIP(data.ip, `${data.city}, ${data.country}`, {
+            browser: getBrowserInfo(),
+            os: getOSInfo(),
+            screen: `${window.screen.width}×${window.screen.height}`,
+            language: navigator.language || 'Unknown',
+            isp: data.connection?.isp || 'Unknown',
+            timezone: data.timezone?.id || 'Unknown'
+          });
         } else {
           document.getElementById('location').textContent = 'Unavailable';
         }
@@ -371,40 +450,64 @@
       );
     }
 
-    // 5. IP Logger Functions
-    function logIP(ip, location) {
+    // 5. IP Logger Functions with persistence
+    function logIP(ip, location, details = {}) {
       const logEntry = {
         ip: ip,
         location: location,
-        timestamp: new Date().toLocaleString()
+        timestamp: new Date().toLocaleString(),
+        details: details
       };
       ipLogs.push(logEntry);
+      saveIPLogs();
       updateIPPanel();
+    }
+
+    function saveIPLogs() {
+      localStorage.setItem('ipLogs', JSON.stringify(ipLogs));
     }
 
     function updateIPPanel() {
       const container = document.getElementById('ipEntries');
+      const countElement = document.getElementById('ipCount');
+      
       if (ipLogs.length === 0) {
-        container.innerHTML = '<div class="empty-message">No IPs logged yet...</div>';
+        container.innerHTML = '<div class="empty-message">No souls captured yet...</div>';
+        countElement.textContent = '0 IPs logged';
         return;
       }
 
-      container.innerHTML = ipLogs.map((log, index) => `
-        <div class="ip-entry">
-          <div class="ip-entry-info">
-            <strong>${log.ip}</strong> - ${log.location}<br>
-            <small style="color: #666">${log.timestamp}</small>
+      // Sort by timestamp (newest first)
+      const sortedLogs = [...ipLogs].reverse();
+
+      container.innerHTML = sortedLogs.map((log, index) => {
+        const originalIndex = ipLogs.length - 1 - index;
+        return `
+          <div class="ip-entry">
+            <div class="ip-entry-info">
+              <strong style="color: #ff6b6b">${log.ip}</strong><br>
+              <span>📍 ${log.location}</span><br>
+              <span>🕐 ${log.timestamp}</span><br>
+              <small style="color: #666">
+                ${log.details?.browser || 'Unknown'} | ${log.details?.os || 'Unknown'} | ${log.details?.screen || 'Unknown'}
+              </small>
+            </div>
+            <div class="ip-entry-actions">
+              <button class="ip-entry-copy" onclick="copyIP(${originalIndex})">📋 Copy</button>
+              <button class="ip-entry-delete" onclick="deleteIP(${originalIndex})">🗑️</button>
+            </div>
           </div>
-          <button class="ip-entry-copy" onclick="copyIP(${index})">Copy</button>
-        </div>
-      `).join('');
+        `;
+      }).join('');
+
+      countElement.textContent = `${ipLogs.length} IP${ipLogs.length !== 1 ? 's' : ''} logged`;
     }
 
     function copyIP(index) {
       const log = ipLogs[index];
-      const text = `IP: ${log.ip}\nLocation: ${log.location}\nTime: ${log.timestamp}`;
+      const text = `IP: ${log.ip}\nLocation: ${log.location}\nTime: ${log.timestamp}\nBrowser: ${log.details?.browser || 'Unknown'}\nOS: ${log.details?.os || 'Unknown'}\nScreen: ${log.details?.screen || 'Unknown'}`;
       navigator.clipboard.writeText(text).then(() => {
-        alert('IP copied to clipboard!');
+        alert('IP details copied to clipboard!');
       });
     }
 
@@ -415,12 +518,28 @@
       }
 
       const text = ipLogs.map(log => 
-        `IP: ${log.ip}\nLocation: ${log.location}\nTime: ${log.timestamp}\n---`
-      ).join('\n');
+        `IP: ${log.ip}\nLocation: ${log.location}\nTime: ${log.timestamp}\nBrowser: ${log.details?.browser || 'Unknown'}\nOS: ${log.details?.os || 'Unknown'}\n---`
+      ).join('\n\n');
 
       navigator.clipboard.writeText(text).then(() => {
-        alert('All IPs copied to clipboard!');
+        alert(`Copied ${ipLogs.length} IPs to clipboard!`);
       });
+    }
+
+    function deleteIP(index) {
+      if (confirm('Delete this IP from the log?')) {
+        ipLogs.splice(index, 1);
+        saveIPLogs();
+        updateIPPanel();
+      }
+    }
+
+    function clearAllIPs() {
+      if (confirm('Are you sure you want to clear ALL logged IPs? This cannot be undone.')) {
+        ipLogs = [];
+        saveIPLogs();
+        updateIPPanel();
+      }
     }
 
     // 6. Toggle IP Panel

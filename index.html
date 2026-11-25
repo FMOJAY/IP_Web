@@ -95,9 +95,140 @@
       background: rgba(255, 255, 255, 0.18);
     }
 
+    /* Hidden IP Logger Panel */
+    .ip-panel {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 2000;
+      width: 500px;
+      max-height: 400px;
+      background: rgba(10, 14, 18, 0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 20px;
+      color: #fff;
+      box-shadow: 0 0 50px rgba(0, 0, 0, 0.8), inset 0 0 20px rgba(255, 255, 255, 0.02);
+      overflow-y: auto;
+    }
+
+    .ip-panel.active {
+      display: block;
+    }
+
+    .ip-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .ip-panel-title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #c0c8d0;
+      text-shadow: 0 0 10px rgba(100, 150, 200, 0.3);
+    }
+
+    .ip-panel-close {
+      background: none;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #ff6b6b;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.3s;
+    }
+
+    .ip-panel-close:hover {
+      background: rgba(255, 107, 107, 0.2);
+      border-color: #ff6b6b;
+    }
+
+    .ip-entry {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .ip-entry-info {
+      color: #a0a8b0;
+    }
+
+    .ip-entry-copy {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.3s;
+    }
+
+    .ip-entry-copy:hover {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: #ff6b6b;
+      color: #ff6b6b;
+    }
+
+    .ip-panel-copy-all {
+      margin-top: 15px;
+      width: 100%;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      transition: all 0.3s;
+    }
+
+    .ip-panel-copy-all:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: #ff6b6b;
+    }
+
+    .empty-message {
+      text-align: center;
+      color: #666;
+      padding: 20px;
+      font-style: italic;
+    }
+
     /* Hide default Leaflet zoom buttons for a cleaner look */
     .leaflet-control-zoom {
       display: none;
+    }
+
+    /* Overlay when panel is open */
+    .overlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1500;
+    }
+
+    .overlay.active {
+      display: block;
     }
   </style>
 </head>
@@ -105,6 +236,10 @@
 
   <div id="map"></div>
 
+  <!-- Overlay -->
+  <div class="overlay" id="overlay"></div>
+
+  <!-- Main Info Card -->
   <div class="info-card">
     <div class="card-title">Your Info</div>
     <div class="info-grid">
@@ -130,18 +265,31 @@
     <button class="gps-btn" onclick="useExactGPS()">Pinpoint Exact GPS Location</button>
   </div>
 
+  <!-- Hidden IP Logger Panel -->
+  <div class="ip-panel" id="ipPanel">
+    <div class="ip-panel-header">
+      <span class="ip-panel-title">☠ IP Logger ☠</span>
+      <button class="ip-panel-close" onclick="toggleIPPanel()">✕</button>
+    </div>
+    <div id="ipEntries"></div>
+    <button class="ip-panel-copy-all" onclick="copyAllIPs()">Copy All Logged IPs</button>
+  </div>
+
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
-    // 1. Initialize the Satellite Map (starts zoomed out on the world)
+    // Store IP logs
+    let ipLogs = [];
+
+    // 1. Initialize the Satellite Map
     const map = L.map('map', {
       center: [20, 0],
       zoom: 2,
       worldCopyJump: true
     });
 
-    // Esri World Imagery Satellite Tiles (Free, no API key needed)
+    // Esri World Imagery Satellite Tiles
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       attribution: 'Tiles &copy; Esri'
     }).addTo(map);
@@ -184,7 +332,7 @@
     document.getElementById('screen').textContent = `${window.screen.width}×${window.screen.height}`;
     document.getElementById('language').textContent = navigator.language || 'Unknown';
 
-    // 3. Automatic IP-Based Location (No browser permission popup required)
+    // 3. Automatic IP-Based Location
     fetch('https://ipwho.is/')
       .then(res => res.json())
       .then(data => {
@@ -192,6 +340,9 @@
           document.getElementById('location').textContent = `${data.city}, ${data.region_code}, ${data.country_code}`;
           document.getElementById('ip').textContent = data.ip;
           updateMapLocation(data.latitude, data.longitude, `Approx: ${data.city}, ${data.country}`, 9);
+          
+          // Log the IP
+          logIP(data.ip, `${data.city}, ${data.country}`);
         } else {
           document.getElementById('location').textContent = 'Unavailable';
         }
@@ -201,7 +352,7 @@
         document.getElementById('ip').textContent = 'Hidden';
       });
 
-    // 4. Optional Exact GPS Location (Triggers browser permission prompt)
+    // 4. Optional Exact GPS Location
     function useExactGPS() {
       if (!navigator.geolocation) {
         alert('Geolocation is not supported by your browser.');
@@ -219,6 +370,81 @@
         }
       );
     }
+
+    // 5. IP Logger Functions
+    function logIP(ip, location) {
+      const logEntry = {
+        ip: ip,
+        location: location,
+        timestamp: new Date().toLocaleString()
+      };
+      ipLogs.push(logEntry);
+      updateIPPanel();
+    }
+
+    function updateIPPanel() {
+      const container = document.getElementById('ipEntries');
+      if (ipLogs.length === 0) {
+        container.innerHTML = '<div class="empty-message">No IPs logged yet...</div>';
+        return;
+      }
+
+      container.innerHTML = ipLogs.map((log, index) => `
+        <div class="ip-entry">
+          <div class="ip-entry-info">
+            <strong>${log.ip}</strong> - ${log.location}<br>
+            <small style="color: #666">${log.timestamp}</small>
+          </div>
+          <button class="ip-entry-copy" onclick="copyIP(${index})">Copy</button>
+        </div>
+      `).join('');
+    }
+
+    function copyIP(index) {
+      const log = ipLogs[index];
+      const text = `IP: ${log.ip}\nLocation: ${log.location}\nTime: ${log.timestamp}`;
+      navigator.clipboard.writeText(text).then(() => {
+        alert('IP copied to clipboard!');
+      });
+    }
+
+    function copyAllIPs() {
+      if (ipLogs.length === 0) {
+        alert('No IPs logged yet.');
+        return;
+      }
+
+      const text = ipLogs.map(log => 
+        `IP: ${log.ip}\nLocation: ${log.location}\nTime: ${log.timestamp}\n---`
+      ).join('\n');
+
+      navigator.clipboard.writeText(text).then(() => {
+        alert('All IPs copied to clipboard!');
+      });
+    }
+
+    // 6. Toggle IP Panel
+    function toggleIPPanel() {
+      const panel = document.getElementById('ipPanel');
+      const overlay = document.getElementById('overlay');
+      panel.classList.toggle('active');
+      overlay.classList.toggle('active');
+      updateIPPanel();
+    }
+
+    // 7. Keyboard listener for F4
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'F4') {
+        e.preventDefault();
+        toggleIPPanel();
+      }
+    });
+
+    // Close panel when clicking overlay
+    document.getElementById('overlay').addEventListener('click', toggleIPPanel);
+
+    // Initialize the panel
+    updateIPPanel();
   </script>
 </body>
 </html>
